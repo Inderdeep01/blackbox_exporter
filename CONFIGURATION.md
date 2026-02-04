@@ -210,6 +210,12 @@ then a single address is selected to test, using the following logic:
   # It is mutually exclusive with `body`.
   [ body_file: <filename> ]
 
+  # Include the HTTP response body in the debug output.
+  # When enabled, up to 64KB of the response body will be captured and displayed
+  # in the debug output (accessible via ?debug=true query parameter).
+  # This is useful for debugging probe failures and inspecting response content.
+  [ include_response_body: <boolean> | default = false ]
+
 ```
 
 #### `<http_header_match_spec>`

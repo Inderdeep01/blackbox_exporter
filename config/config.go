@@ -321,6 +321,7 @@ type HTTPProbe struct {
 	Compression                  string                  `yaml:"compression,omitempty"`
 	BodySizeLimit                units.Base2Bytes        `yaml:"body_size_limit,omitempty"`
 	UseHTTP3                     bool                    `yaml:"enable_http3,omitempty"`
+	IncludeResponseBody          bool                    `yaml:"include_response_body,omitempty"`
 }
 
 type GRPCProbe struct {

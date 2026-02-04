@@ -35,7 +35,6 @@ import (
 
 var (
 	Probers = map[string]ProbeFn{
-		"http": ProbeHTTP,
 		"tcp":  ProbeTCP,
 		"icmp": ProbeICMP,
 		"dns":  ProbeDNS,
@@ -91,7 +90,7 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger *s
 	}
 
 	prober, ok := Probers[module.Prober]
-	if !ok {
+	if !ok && module.Prober != "http" {
 		http.Error(w, fmt.Sprintf("Unknown prober %q", module.Prober), http.StatusBadRequest)
 		return
 	}
@@ -120,7 +119,13 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger *s
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(probeSuccessGauge)
 	registry.MustRegister(probeDurationGauge)
-	success := prober(ctx, target, module, registry, slLogger)
+	var success bool
+	var responseBody []byte
+	if module.Prober == "http" {
+		success, responseBody = ProbeHTTP(ctx, target, module, registry, slLogger)
+	} else {
+		success = prober(ctx, target, module, registry, slLogger)
+	}
 	duration := time.Since(start).Seconds()
 	probeDurationGauge.Set(duration)
 	if success {
@@ -130,7 +135,7 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger *s
 		slLogger.Error("Probe failed", "duration_seconds", duration)
 	}
 
-	debugOutput := DebugOutput(&module, sl.buffer, registry)
+	debugOutput := DebugOutput(&module, sl.buffer, registry, responseBody)
 	rh.Add(moduleName, target, debugOutput, success)
 
 	if r.URL.Query().Get("debug") == "true" {
@@ -244,10 +249,15 @@ func newScrapeLogger(config *promslog.Config, module string, target string) *scr
 }
 
 // DebugOutput returns plaintext debug output for a probe.
-func DebugOutput(module *config.Module, logBuffer *bytes.Buffer, registry *prometheus.Registry) string {
+func DebugOutput(module *config.Module, logBuffer *bytes.Buffer, registry *prometheus.Registry, responseBody []byte) string {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "Logs for the probe:\n")
 	logBuffer.WriteTo(buf)
+	// Include response body if captured
+	if len(responseBody) > 0 {
+		fmt.Fprintf(buf, "\n\n\nResponse Body:\n")
+		buf.Write(responseBody)
+	}
 	fmt.Fprintf(buf, "\n\n\nMetrics that would have been returned:\n")
 	mfs, err := registry.Gather()
 	if err != nil {
