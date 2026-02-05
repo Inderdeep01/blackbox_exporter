@@ -294,7 +294,7 @@ func (bc *byteCounter) Read(p []byte) (int, error) {
 
 var userAgentDefaultHeader = fmt.Sprintf("Blackbox-Exporter/%s", version.Version)
 
-func ProbeHTTP(ctx context.Context, target string, module config.Module, registry *prometheus.Registry, logger *slog.Logger) (success bool, responseBody []byte) {
+func ProbeHTTP(ctx context.Context, target string, module config.Module, registry *prometheus.Registry, logger *slog.Logger) (success bool, responseBody []byte, responseHeaders http.Header) {
 	var redirects int
 	var (
 		durationGaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -395,7 +395,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	targetURL, err := url.Parse(target)
 	if err != nil {
 		logger.Error("Could not parse target URL", "err", err)
-		return false, nil
+		return false, nil, nil
 	}
 
 	targetHost := targetURL.Hostname()
@@ -408,7 +408,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		durationGaugeVec.WithLabelValues("resolve").Add(lookupTime)
 		if err != nil {
 			logger.Error("Error resolving address", "err", err)
-			return false, nil
+			return false, nil, nil
 		}
 	}
 
@@ -435,7 +435,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		tlsConfig, err := pconfig.NewTLSConfig(&httpClientConfig.TLSConfig)
 		if err != nil {
 			logger.Error("Error creating TLS config for HTTP/3", "err", err)
-			return false, nil
+			return false, nil, nil
 		}
 
 		// HTTP/3 requires TLS 1.3 minimum
@@ -459,7 +459,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		client, err = pconfig.NewClientFromConfig(httpClientConfig, "http_probe", pconfig.WithKeepAlivesDisabled())
 		if err != nil {
 			logger.Error("Error generating HTTP client", "err", err)
-			return false, nil
+			return false, nil, nil
 		}
 
 		// Create a second transport without ServerName for redirects to different hosts
@@ -470,14 +470,14 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		noServerName, err = pconfig.NewRoundTripperFromConfig(serverNamelessConfig, "http_probe", pconfig.WithKeepAlivesDisabled())
 		if err != nil {
 			logger.Error("Error generating HTTP client without ServerName", "err", err)
-			return false, nil
+			return false, nil, nil
 		}
 	}
 
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		logger.Error("Error generating cookiejar", "err", err)
-		return false, nil
+		return false, nil, nil
 	}
 	client.Jar = jar
 
@@ -528,7 +528,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		body_file, err := os.Open(httpConfig.BodyFile)
 		if err != nil {
 			logger.Error("Error creating request", "err", err)
-			return false, nil
+			return false, nil, nil
 		}
 		defer body_file.Close()
 		body = body_file
@@ -537,7 +537,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	request, err := http.NewRequest(httpConfig.Method, targetURL.String(), body)
 	if err != nil {
 		logger.Error("Error creating request", "err", err)
-		return false, nil
+		return false, nil, nil
 	}
 	request.Host = origHost
 
@@ -701,6 +701,11 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		// At this point body is fully read and we can write end time.
 		tt.current.end = time.Now()
 
+		// Capture response headers if configured
+		if httpConfig.IncludeResponseHeaders {
+			responseHeaders = resp.Header.Clone()
+		}
+
 		// Check if there is a Last-Modified HTTP response header.
 		if t, err := http.ParseTime(resp.Header.Get("Last-Modified")); err == nil {
 			registry.MustRegister(probeHTTPLastModified)
@@ -795,7 +800,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	contentLengthGauge.Set(float64(resp.ContentLength))
 	bodyUncompressedLengthGauge.Set(float64(respBodyBytes))
 	redirectsGauge.Set(float64(redirects))
-	return success, responseBody
+	return success, responseBody, responseHeaders
 }
 
 func getDecompressionReader(algorithm string, origBody io.ReadCloser) (io.ReadCloser, error) {

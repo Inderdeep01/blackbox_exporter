@@ -121,8 +121,9 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger *s
 	registry.MustRegister(probeDurationGauge)
 	var success bool
 	var responseBody []byte
+	var responseHeaders http.Header
 	if module.Prober == "http" {
-		success, responseBody = ProbeHTTP(ctx, target, module, registry, slLogger)
+		success, responseBody, responseHeaders = ProbeHTTP(ctx, target, module, registry, slLogger)
 	} else {
 		success = prober(ctx, target, module, registry, slLogger)
 	}
@@ -135,7 +136,7 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger *s
 		slLogger.Error("Probe failed", "duration_seconds", duration)
 	}
 
-	debugOutput := DebugOutput(&module, sl.buffer, registry, responseBody)
+	debugOutput := DebugOutput(&module, sl.buffer, registry, responseBody, responseHeaders)
 	rh.Add(moduleName, target, debugOutput, success)
 
 	if r.URL.Query().Get("debug") == "true" {
@@ -249,10 +250,19 @@ func newScrapeLogger(config *promslog.Config, module string, target string) *scr
 }
 
 // DebugOutput returns plaintext debug output for a probe.
-func DebugOutput(module *config.Module, logBuffer *bytes.Buffer, registry *prometheus.Registry, responseBody []byte) string {
+func DebugOutput(module *config.Module, logBuffer *bytes.Buffer, registry *prometheus.Registry, responseBody []byte, responseHeaders http.Header) string {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "Logs for the probe:\n")
 	logBuffer.WriteTo(buf)
+	// Include response headers if captured
+	if len(responseHeaders) > 0 {
+		fmt.Fprintf(buf, "\n\n\nResponse Headers:\n")
+		for name, values := range responseHeaders {
+			for _, value := range values {
+				fmt.Fprintf(buf, "%s: %s\n", name, value)
+			}
+		}
+	}
 	// Include response body if captured
 	if len(responseBody) > 0 {
 		fmt.Fprintf(buf, "\n\n\nResponse Body:\n")

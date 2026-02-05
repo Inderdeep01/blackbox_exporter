@@ -97,13 +97,43 @@ func TestPrometheusConfigSecretsHidden(t *testing.T) {
 
 func TestDebugOutputSecretsHidden(t *testing.T) {
 	module := c.Modules["http_2xx"]
-	out := DebugOutput(&module, &bytes.Buffer{}, prometheus.NewRegistry(), nil)
+	out := DebugOutput(&module, &bytes.Buffer{}, prometheus.NewRegistry(), nil, nil)
 
 	if strings.Contains(out, "mysecret") {
 		t.Errorf("Secret exposed in debug output: %v", out)
 	}
 	if !strings.Contains(out, "<secret>") {
 		t.Errorf("Hidden secret missing from debug output: %v", out)
+	}
+}
+
+func TestDebugOutputWithHeadersAndBody(t *testing.T) {
+	module := c.Modules["http_2xx"]
+	headers := http.Header{
+		"Content-Type":    {"application/json"},
+		"X-Custom-Header": {"test-value"},
+	}
+	body := []byte(`{"status": "ok"}`)
+
+	out := DebugOutput(&module, &bytes.Buffer{}, prometheus.NewRegistry(), body, headers)
+
+	// Check that headers section is present
+	if !strings.Contains(out, "Response Headers:") {
+		t.Errorf("Response Headers section missing from debug output")
+	}
+	if !strings.Contains(out, "Content-Type: application/json") {
+		t.Errorf("Content-Type header missing from debug output")
+	}
+	if !strings.Contains(out, "X-Custom-Header: test-value") {
+		t.Errorf("X-Custom-Header missing from debug output")
+	}
+
+	// Check that body section is present
+	if !strings.Contains(out, "Response Body:") {
+		t.Errorf("Response Body section missing from debug output")
+	}
+	if !strings.Contains(out, `{"status": "ok"}`) {
+		t.Errorf("Response body content missing from debug output")
 	}
 }
 

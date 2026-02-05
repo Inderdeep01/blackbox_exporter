@@ -322,6 +322,7 @@ type HTTPProbe struct {
 	BodySizeLimit                units.Base2Bytes        `yaml:"body_size_limit,omitempty"`
 	UseHTTP3                     bool                    `yaml:"enable_http3,omitempty"`
 	IncludeResponseBody          bool                    `yaml:"include_response_body,omitempty"`
+	IncludeResponseHeaders       bool                    `yaml:"include_response_headers,omitempty"`
 }
 
 type GRPCProbe struct {

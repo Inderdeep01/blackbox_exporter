@@ -107,14 +107,15 @@ modules:
       compression: gzip
       headers:
         Accept-Encoding: gzip
-  http_with_response_body:
+  http_with_debug_response:
     prober: http
     timeout: 5s
     http:
       method: GET
-      # Capture response body for debug output (up to 64KB)
+      # Capture response headers and body for debug output
       # View with ?debug=true query parameter
-      include_response_body: true
+      include_response_headers: true
+      include_response_body: true  # up to 64KB
   tls_connect:
     prober: tcp
     timeout: 5s

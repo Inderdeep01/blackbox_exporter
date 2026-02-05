@@ -216,6 +216,12 @@ then a single address is selected to test, using the following logic:
   # This is useful for debugging probe failures and inspecting response content.
   [ include_response_body: <boolean> | default = false ]
 
+  # Include the HTTP response headers in the debug output.
+  # When enabled, all response headers will be captured and displayed
+  # in the debug output (accessible via ?debug=true query parameter).
+  # This is useful for debugging probe failures and inspecting response headers.
+  [ include_response_headers: <boolean> | default = false ]
+
 ```
 
 #### `<http_header_match_spec>`
